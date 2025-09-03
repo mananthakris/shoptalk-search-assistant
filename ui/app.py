@@ -13,7 +13,7 @@ k = st.slider("Top K", 1, 20, 10)
 
 if st.button("Search") and q.strip():
     with st.spinner("Searching..."):
-        r = requests.get(f"{API_URL}/search", params={"q": q, "k": k}, timeout=60)
+        r = requests.get(f"{API_URL}/answer", params={"q": q, "k": k}, timeout=60)
         r.raise_for_status()
         data = r.json()
 

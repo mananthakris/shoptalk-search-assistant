@@ -1,56 +1,88 @@
-
-import os
+# api/main.py (excerpt)
+import os, json
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
-from typing import List, Optional
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-DB_PATH = os.getenv("DB_PATH", "vectordb")
-MODEL_NAME = os.getenv("MODEL_NAME", "intfloat/e5-base-v2")
+from api.llm_helper import llm_parse_query, llm_nlg_answer  # <-- new
 
-app = FastAPI(title="ShopTalk Vector Search API")
+client = chromadb.PersistentClient(path=os.getenv("DB_PATH", "vectordb"))
+coll   = client.get_or_create_collection(name="products", metadata={"hnsw:space":"cosine"})
+encoder = SentenceTransformer(os.getenv("MODEL_NAME", "intfloat/e5-base-v2"))
 
-# init vector db + model
-client = chromadb.PersistentClient(path=DB_PATH)
-coll = client.get_or_create_collection(name="products", metadata={"hnsw:space":"cosine"})
-model = SentenceTransformer(MODEL_NAME)
+app = FastAPI(title="ShopTalk — LLM + Vector Search")
 
-class SearchHit(BaseModel):
-    id: str
-    title: Optional[str] = None
-    url: Optional[str] = None
-    price: Optional[float] = None
-    score: float
+def embed_query(text: str) -> List[float]:
+    return encoder.encode([f"query: {text}"], normalize_embeddings=True)[0].tolist()
 
-class SearchResponse(BaseModel):
-    query: str
-    results: List[SearchHit]
+def apply_filters(results: Dict[str, List], filters: Dict[str, Any]) -> Dict[str, List]:
+    ids   = results.get("ids", [[]])[0]
+    metas = results.get("metadatas", [[]])[0]
+    dists = results.get("distances", [[]])[0]
+    if not ids: return results
 
-@app.get("/health")
-def health():
-    return {"ok": True, "count": coll.count()}
+    def norm(x): return (x or "").strip().lower()
+    pmax   = filters.get("price_max")
+    fcolor = norm(filters.get("color"))
+    fbrand = norm(filters.get("brand"))
+    fgender= norm(filters.get("gender"))
 
-@app.get("/search", response_model=SearchResponse)
-def search(q: str = Query(..., description="User query"), k: int = 10):
-    # e5 expects "query: " prefix for best results (per model card)
-    qtext = f"query: {q}"
-    qvec = model.encode([qtext], normalize_embeddings=True)[0].tolist()
+    kept = []
+    for idx, m in enumerate(metas):
+        if not m: 
+            continue
+        ok = True
+        if pmax is not None and m.get("price") not in (None, ""):
+            try: ok &= float(m["price"]) <= float(pmax)
+            except: pass
+        if fcolor and norm(m.get("color")) not in ("", fcolor):
+            ok = False
+        if fbrand and fbrand not in norm(m.get("brand","")):
+            ok = False
+        if fgender and fgender not in norm(m.get("gender","")):
+            ok = False
+        if ok:
+            kept.append((ids[idx], m, dists[idx]))
 
-    out = coll.query(query_embeddings=[qvec], n_results=k, include=["metadatas","distances"])
-    hits = []
-    ids = out.get("ids", [[]])[0]
-    dists = out.get("distances", [[]])[0]  # cosine distance-ish; lower is better
-    metas = out.get("metadatas", [[]])[0]
+    if not kept:
+        return results
+    kept_ids, kept_metas, kept_dists = zip(*kept)
+    return {"ids":[list(kept_ids)], "metadatas":[list(kept_metas)], "distances":[list(kept_dists)]}
 
-    # Turn distances into a similarity-ish score (1 - distance) for readability
-    for i in range(len(ids)):
-        m = metas[i] or {}
-        hits.append(SearchHit(
-            id=ids[i],
-            title=m.get("title"),
-            url=m.get("url"),
-            price=m.get("price"),
-            score=max(0.0, 1.0 - float(dists[i]))
-        ))
-    return SearchResponse(query=q, results=hits)
+class AnswerResp(BaseModel):
+    answer: str
+    rewritten_query: Optional[str] = None
+    filters: Dict[str, Any]
+    results: List[Dict[str, Any]]
+
+@app.get("/answer", response_model=AnswerResp)
+async def answer(q: str = Query(...), k: int = 20):
+    # 1) LLM pre-search
+    parsed = await llm_parse_query(q)
+    rewritten = parsed.get("rewrite") or q
+
+    # 2) Retrieve
+    qvec = embed_query(rewritten)
+    out  = coll.query(query_embeddings=[qvec], n_results=k, include=["metadatas","distances"])
+
+    # 3) Filter
+    out_f = apply_filters(out, parsed)
+    ids   = out_f["ids"][0] if out_f.get("ids") else []
+    metas = out_f["metadatas"][0] if out_f.get("metadatas") else []
+    dists = out_f["distances"][0] if out_f.get("distances") else []
+
+    # 4) NLG over candidates
+    answer = await llm_nlg_answer(q, parsed, metas)
+
+    # Convert distances → similarity-ish score for UI
+    results = []
+    for i, m, d in zip(ids, metas, dists):
+        s = max(0.0, 1.0 - float(d))
+        r = dict(m or {})
+        r["id"] = r.get("id", i)
+        r["score"] = s
+        results.append(r)
+
+    return AnswerResp(answer=answer, rewritten_query=rewritten, filters=parsed, results=results)
