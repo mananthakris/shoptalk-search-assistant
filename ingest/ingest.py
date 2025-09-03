@@ -27,8 +27,8 @@ def main():
             embeddings=sl["embedding"].tolist(),
             metadatas=[
                 {
-                    # "item_name": sl.iloc[j]["item_name"],
-                    # "url": sl.iloc[j]["image_url"],
+                    "title": sl.iloc[j]["item_name"],
+                    "url": sl.iloc[j]["image_url"],
                     # "price": None if pd.isna(sl.iloc[j]["price"]) else float(sl.iloc[j]["price"]),
                     "text": sl.iloc[j]["text_for_embed_aug"]
                 }
