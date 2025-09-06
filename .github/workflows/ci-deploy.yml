@@ -1,0 +1,120 @@
+name: CI + Deploy (GHCR → Cloud Run)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  SERVICE_API: shoptalk-api
+  SERVICE_UI:  shoptalk-ui
+  REGION:      ${{ secrets.GCP_REGION }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional: run quick tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps (smoke test)
+        run: |
+          pip install -r services/api/requirements.txt
+          pip install -r services/ui/requirements.txt
+          echo "✅ deps installed"
+
+      # Login to GHCR
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build images
+      - name: Build images
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} services/api
+          docker build -t ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  services/ui
+
+      # Push by SHA
+      - name: Push images (by SHA)
+        run: |
+          docker push ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}
+
+      # Tag and push :latest on main
+      - name: Tag & push :latest
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker tag ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} ghcr.io/${{ github.repository }}/shoptalk-api:latest
+          docker tag ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  ghcr.io/${{ github.repository }}/shoptalk-ui:latest
+          docker push ghcr.io/${{ github.repository }}/shoptalk-api:latest
+          docker push ghcr.io/${{ github.repository }}/shoptalk-ui:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Authenticate to GCP
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      # --- Deploy API first ---
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_API }} \
+            --image ghcr.io/${{ github.repository }}/shoptalk-api:latest \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --cpu 1 \
+            --port 8000 \
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/data,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }}"
+
+      - name: Get API URL
+        id: apiurl
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_API }} --region ${{ env.REGION }} --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      # --- Deploy UI, pointing at API URL ---
+      - name: Deploy UI to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_UI }} \
+            --image ghcr.io/${{ github.repository }}/shoptalk-ui:latest \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --cpu 1 \
+            --port 8501 \
+            --set-env-vars "API_URL=${{ steps.apiurl.outputs.url }}"
+
+      - name: Print endpoints
+        run: |
+          API_URL=${{ steps.apiurl.outputs.url }}
+          UI_URL=$(gcloud run services describe ${{ env.SERVICE_UI }} --region ${{ env.REGION }} --format='value(status.url)')
+          echo "API: $API_URL"
+          echo "UI : $UI_URL"
