@@ -41,8 +41,8 @@ jobs:
       # Build images
       - name: Build images
         run: |
-          docker build -t ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} services/api
-          docker build -t ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  services/ui
+          docker build -t ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} /api
+          docker build -t ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  /ui
 
       # Push by SHA
       - name: Push images (by SHA)
