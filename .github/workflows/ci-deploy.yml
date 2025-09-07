@@ -26,9 +26,9 @@ jobs:
           python-version: "3.11"
       - name: Install deps (smoke test)
         run: |
-          pip install -r services/api/requirements.txt
-          pip install -r services/ui/requirements.txt
-          echo "✅ deps installed"
+          pip install -r api/requirements.txt
+          pip install -r ui/requirements.txt
+          echo " deps installed"
 
       # Login to GHCR
       - name: Login to GHCR
