@@ -1,141 +1,104 @@
 #!/usr/bin/env python
-"""
-Rebuild ChromaDB from a Parquet file using a (fine-tuned) SentenceTransformers model.
-
-Example:
-  python scripts/rebuild_index.py \
-    --parquet data/products_ft.parquet \
-    --db-path vectordb \
-    --collection products \
-    --model your-username/e5-base-ft-abo \
-    --id-col item_id \
-    --title-col item_name \
-    --url-col image_url \
-    --text-col text_for_embed_aug \
-    --batch 512 \
-    --wipe
-"""
-
-import os
-import argparse
-import shutil
+import argparse, shutil
 from pathlib import Path
-
 import pandas as pd
+import numpy as np
 import chromadb
-from sentence_transformers import SentenceTransformer
-
 
 def parse_args():
     p = argparse.ArgumentParser()
-    # IO
-    p.add_argument("--parquet", required=True, help="Path to Parquet containing products")
-    p.add_argument("--db-path", default="vectordb", help="Chroma persistent directory")
-    p.add_argument("--collection", default="products", help="Chroma collection name")
-    p.add_argument("--wipe", action="store_true", help="Remove db-path before rebuild")
-
-    # Columns
-    p.add_argument("--id-col", default="item_id", help="Unique ID column")
-    p.add_argument("--title-col", default="item_name", help="Title column (for metadata.title)")
-    p.add_argument("--url-col", default="image_url", help="URL column (for metadata.url)")
-    p.add_argument("--text-col", default="text_for_embed_aug", help="Text column to embed & store")
-
-    # Model & batching
-    p.add_argument("--model", default="mananthakris/e5-base-ft-abo", help="HF model id or local path")
-    p.add_argument("--batch", type=int, default=512, help="Embedding/upsert batch size")
+    p.add_argument("--parquet", required=True)
+    p.add_argument("--db-path", default="vectordb")
+    p.add_argument("--collection", default="products")
+    p.add_argument("--wipe", action="store_true")
+    p.add_argument("--id-col", default="item_id")
+    p.add_argument("--title-col", default="item_name_c")
+    p.add_argument("--url-col", default="image_url")
+    p.add_argument("--text-col", default="text_for_embed_aug")
+    p.add_argument("--ptype-col", default="product_type_c")   
+    p.add_argument("--embedding-col", default="embedding")
+    p.add_argument("--batch", type=int, default=1000)
     return p.parse_args()
 
-
-def needs_e5_prefix(model_name: str) -> bool:
-    """Return True if we should prepend 'passage: ' to docs for this model family."""
-    name = model_name.lower()
-    return ("e5" in name) or ("gte" in name)  # common convention; extend if you like
-
+def extract_category(v):
+    # Handles dict/list/str; ABO often stores {"value":"SHOES"}
+    if v is None: return ""
+    if isinstance(v, dict):
+        if "value" in v and v["value"]:
+            return str(v["value"]).strip().lower()
+        # join all values as fallback
+        return " ".join(str(x) for x in v.values()).strip().lower()
+    if isinstance(v, list):
+        return " ".join(extract_category(x) for x in v).strip().lower()
+    return str(v).strip().lower()
 
 def main():
     args = parse_args()
 
-    # Optional clean wipe
     db_dir = Path(args.db_path)
     if args.wipe and db_dir.exists():
-        print(f"[rebuild] Wiping {db_dir} ...")
-        shutil.rmtree(db_dir)
+        print(f"[rebuild] Wiping {db_dir} ..."); shutil.rmtree(db_dir)
 
     print(f"[rebuild] Loading Parquet: {args.parquet}")
     df = pd.read_parquet(args.parquet)
 
-    # Basic column checks
-    required_cols = {args.id_col, args.title_col, args.url_col, args.text_col}
-    missing = [c for c in required_cols if c not in df.columns]
+    required = {args.id_col, args.title_col, args.url_col, args.text_col, args.embedding_col}
+    missing = [c for c in required if c not in df.columns]
     if missing:
-        raise ValueError(f"Missing required columns in Parquet: {missing}")
+        raise ValueError(f"Missing required columns: {missing}")
 
-    # Drop duplicate IDs
     before = len(df)
     df = df.drop_duplicates(subset=[args.id_col], keep="first").reset_index(drop=True)
     print(f"[rebuild] Dropped duplicates: {before - len(df)} (kept {len(df)})")
 
-    # Prepare Chroma
+  
+    E = np.vstack(df["embedding"].to_list()).astype("float32")
+    norms = np.linalg.norm(E, axis=1)
+    print("Doc vector norms: mean=", norms.mean(), "std=", norms.std(), "min=", norms.min(), "max=", norms.max())
+    
+    # If not ~1.0, normalize and save before upsert:
+    if not (0.97 < norms.mean() < 1.03):
+        E = E / np.clip(np.linalg.norm(E, axis=1, keepdims=True), 1e-8, None)
+        df["embedding"] = [e.tolist() for e in E]
+
+    # # Build category if present
+    # if args.ptype_col in df.columns:
+    #     df["_category"] = df[args.ptype_col].apply(extract_category)
+    # else:
+    #     df["_category"] = ""
+
     client = chromadb.PersistentClient(path=str(db_dir))
     try:
         client.delete_collection(args.collection)
     except Exception:
         pass
-    coll = client.get_or_create_collection(name=args.collection, metadata={"hnsw:space": "cosine"})
+    coll = client.get_or_create_collection(name=args.collection, metadata={"hnsw:space":"cosine"})
 
-    # Load encoder (supports private HF repos via HUGGINGFACE_HUB_TOKEN)
-    # If your FT model is local, pass the local folder path to --model
-    print(f"[rebuild] Loading encoder: {args.model}")
-    # SentenceTransformers will pick up HUGGINGFACE_HUB_TOKEN env var automatically for private repos
-    encoder = SentenceTransformer(args.model)
-
-    ids = df[args.id_col].astype(str).tolist()
-    titles = df[args.title_col].astype(str).tolist()
-    urls = df[args.url_col].astype(str).tolist()
+    ids   = df[args.id_col].astype(str).tolist()
+    titles= df[args.title_col].astype(str).tolist()
+    urls  = df[args.url_col].astype(str).tolist()
     texts = df[args.text_col].astype(str).tolist()
+    embs  = df[args.embedding_col].tolist()
+    cats  = df[args.ptype_col].astype(str).tolist()
 
-    # Build metadata objects (aligns with your UI expectations)
     metadatas = [
-        {"title": t, "url": u, "text": x}
-        for t, u, x in zip(titles, urls, texts)
+        {"title": t, "url": u, "text": x, "category": c}
+        for t, u, x, c in zip(titles, urls, texts, cats)
     ]
 
-    # Encode docs (prefix for e5-like models)
-    if needs_e5_prefix(args.model):
-        enc_docs = [f"passage: {t}" for t in texts]
-    else:
-        enc_docs = texts
-
-    print(f"[rebuild] Encoding {len(enc_docs)} docs ...")
-    embeddings = encoder.encode(
-        enc_docs,
-        batch_size=args.batch,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-    )
-
-    # Upsert in batches
     B = args.batch
     total = len(df)
-    print(f"[rebuild] Upserting to Chroma (collection='{args.collection}') ...")
+    print(f"[rebuild] Upserting {total} rows into '{args.collection}' ...")
     for i in range(0, total, B):
-        sl_ids = ids[i:i+B]
-        sl_docs = texts[i:i+B]
-        sl_meta = metadatas[i:i+B]
-        sl_embs = embeddings[i:i+B].tolist()
-
         coll.upsert(
-            ids=sl_ids,
-            embeddings=sl_embs,
-            metadatas=sl_meta,
-            documents=sl_docs,  # optional, handy for debug
+            ids=ids[i:i+B],
+            embeddings=embs[i:i+B],
+            metadatas=metadatas[i:i+B],
+            documents=texts[i:i+B],
         )
-        print(f"[rebuild] Upserted {i + len(sl_ids)}/{total}")
+        print(f"[rebuild] Upserted {min(i+B, total)}/{total}")
 
-    print(f"[rebuild] Done. Collection count = {coll.count()}")
-    print(f"[rebuild] DB path: {db_dir.resolve()}")
-
+    print(f"[rebuild] Done. Count = {coll.count()} | DB: {db_dir.resolve()}")
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,16 @@
+{
+  "run_id": "e5-base-ft-20250907T063839Z",
+  "timestamp_utc": "20250907T063839Z",
+  "model_base": "intfloat/e5-base-v2",
+  "fine_tuned_path": "ft_triplet_e5",
+  "rows": 162416,
+  "embedding_dim": 768,
+  "columns": [
+    "item_id",
+    "item_name_c",
+    "product_type_c",
+    "text_for_embed_aug",
+    "image_url",
+    "embedding"
+  ]
+}

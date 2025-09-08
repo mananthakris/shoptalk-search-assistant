@@ -13,7 +13,7 @@ def test_embed_and_retrieve_tiny():
             {"id":"3","text":"blue trail running sneakers", "brand":"Salomon"},
         ]
 
-        enc = SentenceTransformer("intfloat/e5-base-v2")
+        enc = SentenceTransformer("mananthakris/e5-base-ft-abo")
         embeddings = enc.encode([f"passage: {d['text']}" for d in docs], normalize_embeddings=True)
 
         coll.add(
