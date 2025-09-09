@@ -147,9 +147,165 @@ make seed
 # Run tests
 make test
 
-# Build Docker images (if needed)
+# Build Docker images for production
 make build
 ```
+
+## 🐳 Production Deployment
+
+This project is **production-ready** with full containerization and automated deployment to Google Cloud Platform (GCP) Cloud Run.
+
+### 🏗️ Production Architecture
+
+```mermaid
+graph TB
+    subgraph "GitHub Actions CI/CD"
+        A[Code Push] --> B[Build Docker Images]
+        B --> C[Push to GHCR]
+        C --> D[Deploy to Cloud Run]
+    end
+    
+    subgraph "GCP Cloud Run"
+        D --> E[API Service]
+        D --> F[UI Service]
+        E --> G[Vector Database]
+        F --> E
+    end
+    
+    subgraph "Security & Best Practices"
+        H[GitHub Secrets] --> I[Environment Variables]
+        J[No Secrets in Code] --> K[Secure Configuration]
+        L[Health Checks] --> M[Monitoring]
+    end
+```
+
+### 🚀 Automated Deployment Features
+
+#### ✅ **Containerization**
+- **Multi-stage Docker builds** for optimized image sizes
+- **Health checks** for both API and UI services
+- **CPU-optimized PyTorch** for Cloud Run compatibility
+- **Security best practices** (non-root user, minimal base images)
+
+#### ✅ **CI/CD Pipeline**
+- **GitHub Actions** automated deployment
+- **Container Registry** (GitHub Container Registry)
+- **Zero-downtime deployments** with Cloud Run
+- **Environment-specific configurations**
+
+#### ✅ **Production Security**
+- **Secrets management** via GitHub Secrets (no secrets in code)
+- **Environment variables** for configuration
+- **Authenticated deployments** with service accounts
+- **Network security** with Cloud Run's built-in features
+
+### 🔧 Deployment Configuration
+
+#### Required GitHub Secrets
+```bash
+# GCP Configuration
+GCP_CREDENTIALS          # Service account JSON
+GCP_PROJECT_ID          # GCP Project ID
+GCP_REGION             # Deployment region
+
+# Application Configuration
+OPENAI_API_KEY         # OpenAI API key
+OPENAI_BASE_URL        # OpenAI endpoint (optional)
+PARSE_MODEL           # LLM model for parsing
+NLG_MODEL             # LLM model for generation
+```
+
+#### Cloud Run Services
+- **API Service**: `shoptalk-api` (1 CPU, 1GB RAM)
+- **UI Service**: `shoptalk-ui` (1 CPU, 512MB RAM)
+- **Auto-scaling**: 0-100 instances based on traffic
+- **Public access**: Unauthenticated (configurable)
+
+### 🛠️ Manual Deployment
+
+#### Build and Push Images
+```bash
+# Build API image
+docker build -t ghcr.io/your-org/shoptalk-api:latest ./api
+
+# Build UI image  
+docker build -t ghcr.io/your-org/shoptalk-ui:latest ./ui
+
+# Push to registry
+docker push ghcr.io/your-org/shoptalk-api:latest
+docker push ghcr.io/your-org/shoptalk-ui:latest
+```
+
+#### Deploy to Cloud Run
+```bash
+# Deploy API
+gcloud run deploy shoptalk-api \
+  --image ghcr.io/your-org/shoptalk-api:latest \
+  --region us-central1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --cpu 1 \
+  --port 8000 \
+  --set-env-vars "OPENAI_API_KEY=your-key,DB_PATH=/data"
+
+# Deploy UI
+gcloud run deploy shoptalk-ui \
+  --image ghcr.io/your-org/shoptalk-ui:latest \
+  --region us-central1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --memory 512Mi \
+  --cpu 1 \
+  --port 8501 \
+  --set-env-vars "API_URL=https://your-api-url"
+```
+
+### 📊 Production Monitoring
+
+#### Health Checks
+- **API Health**: `GET /health` endpoint
+- **UI Health**: Streamlit health endpoint
+- **Automatic restarts** on health check failures
+
+#### Logging & Observability
+- **Structured logging** with request/response tracking
+- **Cloud Run logs** integration
+- **Performance metrics** and error tracking
+- **Query parsing** and filtering logs
+
+#### Performance Optimization
+- **CPU-optimized models** for Cloud Run
+- **Efficient vector search** with Chroma
+- **Connection pooling** and caching
+- **Timeout protection** (30-second limits)
+
+### 🔒 Security Features
+
+#### Secrets Management
+- ✅ **No secrets in repository**
+- ✅ **GitHub Secrets** for sensitive data
+- ✅ **Environment variables** for configuration
+- ✅ **Service account authentication**
+
+#### Network Security
+- ✅ **HTTPS by default** (Cloud Run)
+- ✅ **Authenticated deployments**
+- ✅ **Private container registry**
+- ✅ **Configurable access controls**
+
+#### Application Security
+- ✅ **Input validation** and sanitization
+- ✅ **SQL injection protection** (parameterized queries)
+- ✅ **Rate limiting** (Cloud Run built-in)
+- ✅ **Error handling** without information leakage
+
+### 🌐 Production URLs
+
+After deployment, your services will be available at:
+- **API**: `https://shoptalk-api-xxx-uc.a.run.app`
+- **UI**: `https://shoptalk-ui-xxx-uc.a.run.app`
+- **API Docs**: `https://shoptalk-api-xxx-uc.a.run.app/docs`
 
 ## 🔍 Usage Examples
 
@@ -224,6 +380,10 @@ shoptalk-search-assistant/
 - **Result Reranking**: Cross-encoder model for relevance
 - **Natural Responses**: LLM-generated conversational answers
 - **Error Handling**: Timeout protection and graceful fallbacks
+- **Production Ready**: Full containerization with Docker
+- **Cloud Native**: Automated deployment to GCP Cloud Run
+- **Security First**: No secrets in code, secure configuration
+- **CI/CD Pipeline**: Automated testing and deployment
 
 ## 🔧 Configuration
 
