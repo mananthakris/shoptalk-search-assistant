@@ -54,8 +54,8 @@ jobs:
       - name: Tag & push :latest
         if: github.ref == 'refs/heads/main'
         run: |
-          docker tag ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} ghcr.io/${{ github.repository }}/shoptalk-api:latest
-          docker tag ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  ghcr.io/${{ github.repository }}/shoptalk-ui:latest
+          docker tag ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} ghcr.io/${{ github.repository }}/shoptalk-api:latest .
+          docker tag ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  ghcr.io/${{ github.repository }}/shoptalk-ui:latest .
           docker push ghcr.io/${{ github.repository }}/shoptalk-api:latest
           docker push ghcr.io/${{ github.repository }}/shoptalk-ui:latest
 
