@@ -44,20 +44,28 @@ jobs:
           docker build -t ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} -f api/Dockerfile ./api
           docker build -t ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  -f ui/Dockerfile ./ui
 
-      # Push by SHA
-      - name: Push images (by SHA)
+     # Authenticate docker to Artifact Registry
+      - name: Configure Docker for Artifact Registry
         run: |
-          docker push ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}
+          gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
-      # Tag and push :latest on main
-      - name: Tag & push :latest
-        if: github.ref == 'refs/heads/main'
+      # Build & push API to Artifact Registry
+      - name: Build & push API to AR
         run: |
-          docker tag ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} ghcr.io/${{ github.repository }}/shoptalk-api:latest
-          docker tag ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  ghcr.io/${{ github.repository }}/shoptalk-ui:latest
-          docker push ghcr.io/${{ github.repository }}/shoptalk-api:latest
-          docker push ghcr.io/${{ github.repository }}/shoptalk-ui:latest
+          AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
+          AR_IMAGE_API=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-api:${{ github.sha }}
+          docker build -t $AR_IMAGE_API api
+          docker push $AR_IMAGE_API
+          echo "AR_IMAGE_API=$AR_IMAGE_API" >> $GITHUB_ENV
+
+      # Build & push UI to Artifact Registry
+      - name: Build & push UI to AR
+        run: |
+          AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
+          AR_IMAGE_UI=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-ui:${{ github.sha }}
+          docker build -t $AR_IMAGE_UI ui
+          docker push $AR_IMAGE_UI
+          echo "AR_IMAGE_UI=$AR_IMAGE_UI" >> $GITHUB_ENV
 
   deploy:
     needs: build-and-push
@@ -84,7 +92,7 @@ jobs:
       - name: Deploy API to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_API }} \
-            --image ghcr.io/${{ github.repository }}/shoptalk-api:latest \
+            --image ${{ env.AR_IMAGE_API }} \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
@@ -103,7 +111,7 @@ jobs:
       - name: Deploy UI to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_UI }} \
-            --image ghcr.io/${{ github.repository }}/shoptalk-ui:latest \
+            --image ${{ env.AR_IMAGE_UI }} \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
