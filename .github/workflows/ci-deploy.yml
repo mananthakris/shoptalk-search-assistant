@@ -30,21 +30,16 @@ jobs:
           pip install -r ui/requirements.txt
           echo " deps installed"
 
-      # Login to GHCR
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Build images
-      - name: Build images
+      # Create Artifact Registry repository if it doesn't exist
+      - name: Create Artifact Registry repository
         run: |
-          docker build -t ghcr.io/${{ github.repository }}/shoptalk-api:${{ github.sha }} -f api/Dockerfile ./api
-          docker build -t ghcr.io/${{ github.repository }}/shoptalk-ui:${{ github.sha }}  -f ui/Dockerfile ./ui
+          gcloud artifacts repositories create shoptalk \
+            --repository-format=docker \
+            --location=${{ secrets.GCP_REGION }} \
+            --description="ShopTalk container images" \
+            --quiet || echo "Repository already exists"
 
-     # Authenticate docker to Artifact Registry
+      # Authenticate docker to Artifact Registry
       - name: Configure Docker for Artifact Registry
         run: |
           gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
@@ -54,7 +49,7 @@ jobs:
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_API=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-api:${{ github.sha }}
-          docker build -t $AR_IMAGE_API api
+          docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
           docker push $AR_IMAGE_API
           echo "AR_IMAGE_API=$AR_IMAGE_API" >> $GITHUB_ENV
 
@@ -63,7 +58,7 @@ jobs:
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_UI=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-ui:${{ github.sha }}
-          docker build -t $AR_IMAGE_UI ui
+          docker build -t $AR_IMAGE_UI -f ui/Dockerfile ./ui
           docker push $AR_IMAGE_UI
           echo "AR_IMAGE_UI=$AR_IMAGE_UI" >> $GITHUB_ENV
 
@@ -99,7 +94,7 @@ jobs:
             --memory 1Gi \
             --cpu 1 \
             --port 8000 \
-            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/data,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }}"
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/vectordb,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }},VECTORDB_GS_PATH=${{ secrets.VECTORDB_GS_PATH }}"
 
       - name: Get API URL
         id: apiurl
