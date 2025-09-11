@@ -13,6 +13,9 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      api-image: ${{ steps.set-outputs.outputs.api-image }}
+      ui-image: ${{ steps.set-outputs.outputs.ui-image }}
     permissions:
       contents: read
       packages: write
@@ -57,21 +60,30 @@ jobs:
 
       # Build & push API to Artifact Registry
       - name: Build & push API to AR
+        id: build-api
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_API=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-api:${{ github.sha }}
           docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
           docker push $AR_IMAGE_API
-          echo "AR_IMAGE_API=$AR_IMAGE_API" >> $GITHUB_ENV
+          echo "api-image=$AR_IMAGE_API" >> $GITHUB_OUTPUT
 
       # Build & push UI to Artifact Registry
       - name: Build & push UI to AR
+        id: build-ui
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_UI=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-ui:${{ github.sha }}
           docker build -t $AR_IMAGE_UI -f ui/Dockerfile ./ui
           docker push $AR_IMAGE_UI
-          echo "AR_IMAGE_UI=$AR_IMAGE_UI" >> $GITHUB_ENV
+          echo "ui-image=$AR_IMAGE_UI" >> $GITHUB_OUTPUT
+
+      # Set job outputs
+      - name: Set outputs
+        id: set-outputs
+        run: |
+          echo "api-image=${{ steps.build-api.outputs.api-image }}" >> $GITHUB_OUTPUT
+          echo "ui-image=${{ steps.build-ui.outputs.ui-image }}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: build-and-push
@@ -98,7 +110,7 @@ jobs:
       - name: Deploy API to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_API }} \
-            --image ${{ env.AR_IMAGE_API }} \
+            --image ${{ needs.build-and-push.outputs.api-image }} \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
@@ -117,7 +129,7 @@ jobs:
       - name: Deploy UI to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_UI }} \
-            --image ${{ env.AR_IMAGE_UI }} \
+            --image ${{ needs.build-and-push.outputs.ui-image }} \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
