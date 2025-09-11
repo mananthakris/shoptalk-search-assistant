@@ -30,6 +30,17 @@ jobs:
           pip install -r ui/requirements.txt
           echo " deps installed"
 
+      # Authenticate to Google Cloud
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
       # Create Artifact Registry repository if it doesn't exist
       - name: Create Artifact Registry repository
         run: |
