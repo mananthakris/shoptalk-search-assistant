@@ -92,8 +92,10 @@ jobs:
           echo "=== DEBUG: Job Outputs ==="
           echo "API Image: '${{ steps.build-api.outputs.api-image }}'"
           echo "UI Image: '${{ steps.build-ui.outputs.ui-image }}'"
-          echo "API Image length: ${#{{ steps.build-api.outputs.api-image }}}"
-          echo "UI Image length: ${#{{ steps.build-ui.outputs.ui-image }}}"
+          API_IMAGE="${{ steps.build-api.outputs.api-image }}"
+          UI_IMAGE="${{ steps.build-ui.outputs.ui-image }}"
+          echo "API Image length: ${#API_IMAGE}"
+          echo "UI Image length: ${#UI_IMAGE}"
           echo "========================="
 
   deploy:
@@ -117,21 +119,47 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      # --- Deploy API first ---
-      - name: Deploy API to Cloud Run
+      # Verify image names before deployment
+      - name: Verify image names
         run: |
-          echo "=== DEBUG: Deploy Job Outputs ==="
-          echo "API Image from job output: '${{ needs.build-and-push.outputs.api-image }}'"
-          echo "UI Image from job output: '${{ needs.build-and-push.outputs.ui-image }}'"
-          echo "API Image length: ${#{{ needs.build-and-push.outputs.api-image }}}"
-          echo "UI Image length: ${#{{ needs.build-and-push.outputs.ui-image }}}"
-          echo "================================="
+          echo "=== PRE-DEPLOY VERIFICATION ==="
+          API_IMAGE="${{ needs.build-and-push.outputs.api-image }}"
+          UI_IMAGE="${{ needs.build-and-push.outputs.ui-image }}"
           
-          if [ -z "${{ needs.build-and-push.outputs.api-image }}" ]; then
-            echo "ERROR: API image is empty!"
+          echo "API Image: '$API_IMAGE'"
+          echo "UI Image: '$UI_IMAGE'"
+          echo "API Image length: ${#API_IMAGE}"
+          echo "UI Image length: ${#UI_IMAGE}"
+          
+          # Verify images are not empty
+          if [ -z "$API_IMAGE" ]; then
+            echo "❌ ERROR: API image is empty!"
             exit 1
           fi
           
+          if [ -z "$UI_IMAGE" ]; then
+            echo "❌ ERROR: UI image is empty!"
+            exit 1
+          fi
+          
+          # Verify images contain expected parts
+          if [[ "$API_IMAGE" != *"shoptalk-api"* ]]; then
+            echo "❌ ERROR: API image doesn't contain 'shoptalk-api'"
+            exit 1
+          fi
+          
+          if [[ "$UI_IMAGE" != *"shoptalk-ui"* ]]; then
+            echo "❌ ERROR: UI image doesn't contain 'shoptalk-ui'"
+            exit 1
+          fi
+          
+          echo "✅ All image names verified successfully!"
+          echo "================================"
+
+      # --- Deploy API first ---
+      - name: Deploy API to Cloud Run
+        run: |
+          echo "🚀 Deploying API with image: ${{ needs.build-and-push.outputs.api-image }}"
           gcloud run deploy ${{ env.SERVICE_API }} \
             --image ${{ needs.build-and-push.outputs.api-image }} \
             --region ${{ env.REGION }} \
@@ -151,6 +179,7 @@ jobs:
       # --- Deploy UI, pointing at API URL ---
       - name: Deploy UI to Cloud Run
         run: |
+          echo "🚀 Deploying UI with image: ${{ needs.build-and-push.outputs.ui-image }}"
           gcloud run deploy ${{ env.SERVICE_UI }} \
             --image ${{ needs.build-and-push.outputs.ui-image }} \
             --region ${{ env.REGION }} \
