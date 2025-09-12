@@ -67,10 +67,8 @@ jobs:
           echo "Building API image: $AR_IMAGE_API"
           docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
           docker push $AR_IMAGE_API
-          echo "Setting api-image output to: $AR_IMAGE_API"
-          echo "api-image=$AR_IMAGE_API" >> $GITHUB_OUTPUT
-          echo "Output file contents:"
-          cat $GITHUB_OUTPUT
+          echo "API image built: $AR_IMAGE_API"
+          echo "api-image=$AR_IMAGE_API" >> "$GITHUB_OUTPUT"
 
       # Build & push UI to Artifact Registry
       - name: Build & push UI to AR
@@ -81,21 +79,15 @@ jobs:
           echo "Building UI image: $AR_IMAGE_UI"
           docker build -t $AR_IMAGE_UI -f ui/Dockerfile ./ui
           docker push $AR_IMAGE_UI
-          echo "Setting ui-image output to: $AR_IMAGE_UI"
-          echo "ui-image=$AR_IMAGE_UI" >> $GITHUB_OUTPUT
-          echo "Output file contents:"
-          cat $GITHUB_OUTPUT
+          echo "UI image built: $AR_IMAGE_UI"
+          echo "ui-image=$AR_IMAGE_UI" >> "$GITHUB_OUTPUT"
 
-      # Debug step to verify outputs
-      - name: Debug job outputs
+      # Debug: Verify step outputs are set correctly
+      - name: Debug step outputs
         run: |
-          echo "=== DEBUG: Job Outputs ==="
-          echo "API Image: '${{ steps.build-api.outputs.api-image }}'"
-          echo "UI Image: '${{ steps.build-ui.outputs.ui-image }}'"
-          API_IMAGE="${{ steps.build-api.outputs.api-image }}"
-          UI_IMAGE="${{ steps.build-ui.outputs.ui-image }}"
-          echo "API Image length: ${#API_IMAGE}"
-          echo "UI Image length: ${#UI_IMAGE}"
+          echo "=== DEBUG: Step Outputs ==="
+          echo "API step output: '${{ steps.build-api.outputs.api-image }}'"
+          echo "UI step output: '${{ steps.build-ui.outputs.ui-image }}'"
           echo "========================="
 
   deploy:
@@ -105,6 +97,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      API_IMAGE: ${{ needs.build-and-push.outputs.api-image }}
+      UI_IMAGE: ${{ needs.build-and-push.outputs.ui-image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,9 +118,6 @@ jobs:
       - name: Verify image names
         run: |
           echo "=== PRE-DEPLOY VERIFICATION ==="
-          API_IMAGE="${{ needs.build-and-push.outputs.api-image }}"
-          UI_IMAGE="${{ needs.build-and-push.outputs.ui-image }}"
-          
           echo "API Image: '$API_IMAGE'"
           echo "UI Image: '$UI_IMAGE'"
           echo "API Image length: ${#API_IMAGE}"
@@ -159,9 +151,9 @@ jobs:
       # --- Deploy API first ---
       - name: Deploy API to Cloud Run
         run: |
-          echo "🚀 Deploying API with image: ${{ needs.build-and-push.outputs.api-image }}"
+          echo "🚀 Deploying API with image: $API_IMAGE"
           gcloud run deploy ${{ env.SERVICE_API }} \
-            --image ${{ needs.build-and-push.outputs.api-image }} \
+            --image $API_IMAGE \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
@@ -179,9 +171,9 @@ jobs:
       # --- Deploy UI, pointing at API URL ---
       - name: Deploy UI to Cloud Run
         run: |
-          echo "🚀 Deploying UI with image: ${{ needs.build-and-push.outputs.ui-image }}"
+          echo "🚀 Deploying UI with image: $UI_IMAGE"
           gcloud run deploy ${{ env.SERVICE_UI }} \
-            --image ${{ needs.build-and-push.outputs.ui-image }} \
+            --image $UI_IMAGE \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
