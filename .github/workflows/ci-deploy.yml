@@ -14,8 +14,8 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     outputs:
-      api-image: ${{ steps.set-outputs.outputs.api-image }}
-      ui-image: ${{ steps.set-outputs.outputs.ui-image }}
+      api-image: ${{ steps.build-api.outputs.api-image }}
+      ui-image: ${{ steps.build-ui.outputs.ui-image }}
     permissions:
       contents: read
       packages: write
@@ -78,13 +78,6 @@ jobs:
           docker push $AR_IMAGE_UI
           echo "ui-image=$AR_IMAGE_UI" >> $GITHUB_OUTPUT
 
-      # Set job outputs
-      - name: Set outputs
-        id: set-outputs
-        run: |
-          echo "api-image=${{ steps.build-api.outputs.api-image }}" >> $GITHUB_OUTPUT
-          echo "ui-image=${{ steps.build-ui.outputs.ui-image }}" >> $GITHUB_OUTPUT
-
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -109,6 +102,7 @@ jobs:
       # --- Deploy API first ---
       - name: Deploy API to Cloud Run
         run: |
+          echo "API Image: ${{ needs.build-and-push.outputs.api-image }}"
           gcloud run deploy ${{ env.SERVICE_API }} \
             --image ${{ needs.build-and-push.outputs.api-image }} \
             --region ${{ env.REGION }} \
