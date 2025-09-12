@@ -64,9 +64,13 @@ jobs:
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_API=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-api:${{ github.sha }}
+          echo "Building API image: $AR_IMAGE_API"
           docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
           docker push $AR_IMAGE_API
+          echo "Setting api-image output to: $AR_IMAGE_API"
           echo "api-image=$AR_IMAGE_API" >> $GITHUB_OUTPUT
+          echo "Output file contents:"
+          cat $GITHUB_OUTPUT
 
       # Build & push UI to Artifact Registry
       - name: Build & push UI to AR
@@ -74,9 +78,23 @@ jobs:
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_UI=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-ui:${{ github.sha }}
+          echo "Building UI image: $AR_IMAGE_UI"
           docker build -t $AR_IMAGE_UI -f ui/Dockerfile ./ui
           docker push $AR_IMAGE_UI
+          echo "Setting ui-image output to: $AR_IMAGE_UI"
           echo "ui-image=$AR_IMAGE_UI" >> $GITHUB_OUTPUT
+          echo "Output file contents:"
+          cat $GITHUB_OUTPUT
+
+      # Debug step to verify outputs
+      - name: Debug job outputs
+        run: |
+          echo "=== DEBUG: Job Outputs ==="
+          echo "API Image: '${{ steps.build-api.outputs.api-image }}'"
+          echo "UI Image: '${{ steps.build-ui.outputs.ui-image }}'"
+          echo "API Image length: ${#{{ steps.build-api.outputs.api-image }}}"
+          echo "UI Image length: ${#{{ steps.build-ui.outputs.ui-image }}}"
+          echo "========================="
 
   deploy:
     needs: build-and-push
@@ -102,7 +120,18 @@ jobs:
       # --- Deploy API first ---
       - name: Deploy API to Cloud Run
         run: |
-          echo "API Image: ${{ needs.build-and-push.outputs.api-image }}"
+          echo "=== DEBUG: Deploy Job Outputs ==="
+          echo "API Image from job output: '${{ needs.build-and-push.outputs.api-image }}'"
+          echo "UI Image from job output: '${{ needs.build-and-push.outputs.ui-image }}'"
+          echo "API Image length: ${#{{ needs.build-and-push.outputs.api-image }}}"
+          echo "UI Image length: ${#{{ needs.build-and-push.outputs.ui-image }}}"
+          echo "================================="
+          
+          if [ -z "${{ needs.build-and-push.outputs.api-image }}" ]; then
+            echo "ERROR: API image is empty!"
+            exit 1
+          fi
+          
           gcloud run deploy ${{ env.SERVICE_API }} \
             --image ${{ needs.build-and-push.outputs.api-image }} \
             --region ${{ env.REGION }} \
