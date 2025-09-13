@@ -68,7 +68,8 @@ jobs:
           docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
           docker push $AR_IMAGE_API
           echo "API image built: $AR_IMAGE_API"
-          echo "api-image=$AR_IMAGE_API" >> "$GITHUB_OUTPUT"
+          # Store just the image name without the full path to avoid secret detection
+          echo "api-image=shoptalk-api:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       # Build & push UI to Artifact Registry
       - name: Build & push UI to AR
@@ -80,7 +81,8 @@ jobs:
           docker build -t $AR_IMAGE_UI -f ui/Dockerfile ./ui
           docker push $AR_IMAGE_UI
           echo "UI image built: $AR_IMAGE_UI"
-          echo "ui-image=$AR_IMAGE_UI" >> "$GITHUB_OUTPUT"
+          # Store just the image name without the full path to avoid secret detection
+          echo "ui-image=shoptalk-ui:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       # Debug: Verify step outputs are set correctly
       - name: Debug step outputs
@@ -98,8 +100,8 @@ jobs:
       contents: read
       id-token: write
     env:
-      API_IMAGE: ${{ needs.build-and-push.outputs.api-image }}
-      UI_IMAGE: ${{ needs.build-and-push.outputs.ui-image }}
+      API_IMAGE_NAME: ${{ needs.build-and-push.outputs.api-image }}
+      UI_IMAGE_NAME: ${{ needs.build-and-push.outputs.ui-image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -113,6 +115,15 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      # Reconstruct full image paths
+      - name: Set image paths
+        run: |
+          AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
+          echo "API_IMAGE=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$API_IMAGE_NAME" >> $GITHUB_ENV
+          echo "UI_IMAGE=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME" >> $GITHUB_ENV
+          echo "Full API image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$API_IMAGE_NAME"
+          echo "Full UI image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME"
 
       # Verify image names before deployment
       - name: Verify image names
