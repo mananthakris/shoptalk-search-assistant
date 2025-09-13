@@ -134,10 +134,14 @@ jobs:
           echo "Full UI image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME"
           echo "Service account: $SERVICE_ACCOUNT_EMAIL"
 
-      # Verify service account exists and has permissions
+      # Verify service account exists and has permissions (after authentication)
       - name: Verify service account
         run: |
           echo "Verifying service account: $SERVICE_ACCOUNT_EMAIL"
+          
+          # Debug: Check current authentication
+          echo "Current authenticated account:"
+          gcloud auth list
           
           # Check if service account exists
           if gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL >/dev/null 2>&1; then
