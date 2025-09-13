@@ -8,6 +8,10 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     # Create vectordb directory
     mkdir -p /vectordb
     
+    # Configure gcloud to use the default service account (Cloud Run metadata server)
+    echo "Configuring gcloud authentication..."
+    gcloud auth activate-service-account --key-file=/dev/null || true
+    
     # Download from Cloud Storage
     if [ -n "$VECTORDB_GS_PATH" ]; then
         echo "Downloading from: $VECTORDB_GS_PATH"
