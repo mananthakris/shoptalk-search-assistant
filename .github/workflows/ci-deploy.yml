@@ -123,19 +123,12 @@ jobs:
           echo "API_IMAGE=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$API_IMAGE_NAME" >> $GITHUB_ENV
           echo "UI_IMAGE=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME" >> $GITHUB_ENV
           
-          # Extract service account email from credentials
+          # Use the service account from credentials for Cloud Run deployment
           SERVICE_ACCOUNT_EMAIL=$(echo '${{ secrets.GCP_CREDENTIALS }}' | jq -r '.client_email')
           echo "SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL" >> $GITHUB_ENV
           
           # Debug: Show what we extracted
-          echo "Extracted service account: $SERVICE_ACCOUNT_EMAIL"
-          
-          # Verify the service account exists
-          if [ -z "$SERVICE_ACCOUNT_EMAIL" ] || [ "$SERVICE_ACCOUNT_EMAIL" = "null" ]; then
-            echo "❌ ERROR: Could not extract service account email from credentials"
-            echo "Credentials preview: $(echo '${{ secrets.GCP_CREDENTIALS }}' | head -c 100)..."
-            exit 1
-          fi
+          echo "Using service account: $SERVICE_ACCOUNT_EMAIL"
           
           echo "Full API image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$API_IMAGE_NAME"
           echo "Full UI image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME"
@@ -147,14 +140,18 @@ jobs:
           echo "Verifying service account: $SERVICE_ACCOUNT_EMAIL"
           
           # Check if service account exists
-          if ! gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL >/dev/null 2>&1; then
+          if gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL >/dev/null 2>&1; then
+            echo "✅ Service account exists: $SERVICE_ACCOUNT_EMAIL"
+          else
             echo "❌ ERROR: Service account $SERVICE_ACCOUNT_EMAIL does not exist"
-            echo "Please create it with the proper permissions"
+            echo "Please check the GCP_CREDENTIALS secret contains the correct service account JSON"
             exit 1
           fi
           
           # Check if service account has storage permissions
-          if ! gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} --flatten="bindings[].members" --format="table(bindings.role)" --filter="bindings.members:$SERVICE_ACCOUNT_EMAIL" | grep -q "storage"; then
+          if gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} --flatten="bindings[].members" --format="table(bindings.role)" --filter="bindings.members:$SERVICE_ACCOUNT_EMAIL" | grep -q "storage"; then
+            echo "✅ Service account has storage permissions"
+          else
             echo "⚠️  WARNING: Service account may not have storage permissions"
           fi
           
