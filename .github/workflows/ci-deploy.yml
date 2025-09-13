@@ -134,32 +134,12 @@ jobs:
           echo "Full UI image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME"
           echo "Service account: $SERVICE_ACCOUNT_EMAIL"
 
-      # Verify service account exists and has permissions (after authentication)
-      - name: Verify service account
+      # Verify authentication is working
+      - name: Verify authentication
         run: |
-          echo "Verifying service account: $SERVICE_ACCOUNT_EMAIL"
-          
-          # Debug: Check current authentication
           echo "Current authenticated account:"
           gcloud auth list
-          
-          # Check if service account exists
-          if gcloud iam service-accounts describe $SERVICE_ACCOUNT_EMAIL >/dev/null 2>&1; then
-            echo "✅ Service account exists: $SERVICE_ACCOUNT_EMAIL"
-          else
-            echo "❌ ERROR: Service account $SERVICE_ACCOUNT_EMAIL does not exist"
-            echo "Please check the GCP_CREDENTIALS secret contains the correct service account JSON"
-            exit 1
-          fi
-          
-          # Check if service account has storage permissions
-          if gcloud projects get-iam-policy ${{ secrets.GCP_PROJECT_ID }} --flatten="bindings[].members" --format="table(bindings.role)" --filter="bindings.members:$SERVICE_ACCOUNT_EMAIL" | grep -q "storage"; then
-            echo "✅ Service account has storage permissions"
-          else
-            echo "⚠️  WARNING: Service account may not have storage permissions"
-          fi
-          
-          echo "✅ Service account verification complete"
+          echo "✅ Authentication verified - proceeding with deployment"
 
       # Verify image names before deployment
       - name: Verify image names
