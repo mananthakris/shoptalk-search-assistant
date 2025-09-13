@@ -116,14 +116,20 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      # Reconstruct full image paths
-      - name: Set image paths
+      # Reconstruct full image paths and get service account email
+      - name: Set image paths and service account
         run: |
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           echo "API_IMAGE=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$API_IMAGE_NAME" >> $GITHUB_ENV
           echo "UI_IMAGE=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME" >> $GITHUB_ENV
+          
+          # Extract service account email from credentials
+          SERVICE_ACCOUNT_EMAIL=$(echo '${{ secrets.GCP_CREDENTIALS }}' | jq -r '.client_email')
+          echo "SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL" >> $GITHUB_ENV
+          
           echo "Full API image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$API_IMAGE_NAME"
           echo "Full UI image: $AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/$UI_IMAGE_NAME"
+          echo "Service account: $SERVICE_ACCOUNT_EMAIL"
 
       # Verify image names before deployment
       - name: Verify image names
@@ -171,6 +177,7 @@ jobs:
             --memory 1Gi \
             --cpu 1 \
             --port 8000 \
+            --service-account=$SERVICE_ACCOUNT_EMAIL \
             --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/vectordb,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }},VECTORDB_GS_PATH=${{ secrets.VECTORDB_GS_PATH }}"
 
       - name: Get API URL

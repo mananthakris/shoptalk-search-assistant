@@ -69,10 +69,10 @@ Add these secrets:
 #### Required Secrets
 ```bash
 # GCP Configuration
-GCP_CREDENTIALS          # Service account JSON (see step 4)
+GCP_CREDENTIALS          # Service account JSON (see step 4) - email extracted automatically
 GCP_PROJECT_ID          # Your GCP project ID
 GCP_REGION             # us-central1 (or your region)
-SERVICE_ACCOUNT_EMAIL  # shoptalk-deploy@your-project.iam.gserviceaccount.com
+# SERVICE_ACCOUNT_EMAIL  # No longer needed - extracted from GCP_CREDENTIALS
 
 # Application Configuration  
 OPENAI_API_KEY         # Your OpenAI API key
@@ -122,7 +122,7 @@ VECTORDB_GS_PATH      # gs://your-project-shoptalk-vectordb/vectordb
 6. **Add to GitHub Secrets**:
    - Copy the entire JSON content
    - Add as `GCP_CREDENTIALS` secret in GitHub
-   - Add service account email as `SERVICE_ACCOUNT_EMAIL` secret
+   - The service account email is automatically extracted from the JSON
 
 #### Using Command Line
 
@@ -155,8 +155,8 @@ gcloud iam service-accounts keys create shoptalk-deploy-key.json \
 # Copy the JSON content to GitHub Secrets as GCP_CREDENTIALS
 cat shoptalk-deploy-key.json
 
-# Add service account email to GitHub Secrets
-echo "SERVICE_ACCOUNT_EMAIL=shoptalk-deploy@$PROJECT_ID.iam.gserviceaccount.com"
+# Service account email is automatically extracted from GCP_CREDENTIALS
+echo "Service account created: shoptalk-deploy@$PROJECT_ID.iam.gserviceaccount.com"
 ```
 
 ### 5. Enable Required APIs
@@ -209,6 +209,30 @@ gcloud run services list --region=us-central1
 # Check service logs
 gcloud run services logs read shoptalk-api --region=us-central1
 ```
+
+### Troubleshooting Storage Access Issues
+
+If you see errors like `401 Anonymous caller does not have storage.objects.get access`:
+
+1. **Check service account permissions**:
+   ```bash
+   # Get the service account email
+   gcloud run services describe shoptalk-api --region=us-central1 --format='value(spec.template.spec.serviceAccountName)'
+   
+   # Check bucket permissions
+   gsutil iam get gs://your-bucket-name
+   ```
+
+2. **Grant Storage Object Viewer role**:
+   ```bash
+   # Replace with your actual service account email and bucket name
+   gsutil iam ch serviceAccount:shoptalk-deploy@your-project.iam.gserviceaccount.com:objectViewer gs://your-bucket-name
+   ```
+
+3. **Verify the service account has the right roles**:
+   ```bash
+   gcloud projects get-iam-policy your-project-id --flatten="bindings[].members" --format="table(bindings.role)" --filter="bindings.members:shoptalk-deploy@your-project.iam.gserviceaccount.com"
+   ```
 
 ### Test the Application
 1. **Get service URLs**:
