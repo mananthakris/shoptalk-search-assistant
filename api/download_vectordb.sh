@@ -16,8 +16,13 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     echo "Using service account: $SERVICE_ACCOUNT_EMAIL"
     
     # Configure gcloud to use application default credentials
-    gcloud config set auth/use_application_default_credentials true
+    # Set the project ID from metadata server
+    export GOOGLE_CLOUD_PROJECT=$(curl -s "http://metadata.google.internal/computeMetadata/v1/project/project-id" -H "Metadata-Flavor: Google")
+    echo "Using project: $GOOGLE_CLOUD_PROJECT"
+    
+    # Set the account and project for gcloud
     gcloud config set account "$SERVICE_ACCOUNT_EMAIL"
+    gcloud config set project "$GOOGLE_CLOUD_PROJECT"
     
     # Verify authentication is working
     echo "Testing authentication..."
