@@ -8,9 +8,20 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     # Create vectordb directory
     mkdir -p /vectordb
     
-    # Configure gcloud to use the default service account (Cloud Run metadata server)
-    echo "Configuring gcloud authentication..."
-    gcloud auth activate-service-account --key-file=/dev/null || true
+    # Set up authentication for gsutil to use the Cloud Run service account
+    echo "Setting up authentication for gsutil..."
+    
+    # Get the service account email from metadata server
+    SERVICE_ACCOUNT_EMAIL=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email" -H "Metadata-Flavor: Google")
+    echo "Using service account: $SERVICE_ACCOUNT_EMAIL"
+    
+    # Configure gcloud to use application default credentials
+    gcloud config set auth/use_application_default_credentials true
+    gcloud config set account "$SERVICE_ACCOUNT_EMAIL"
+    
+    # Verify authentication is working
+    echo "Testing authentication..."
+    gcloud auth list
     
     # Download from Cloud Storage
     if [ -n "$VECTORDB_GS_PATH" ]; then
