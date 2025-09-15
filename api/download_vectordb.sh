@@ -10,11 +10,15 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     
     # Get access token from metadata server
     echo "Getting access token from metadata server..."
-    ACCESS_TOKEN=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
-        -H "Metadata-Flavor: Google" | jq -r '.access_token')
+    TOKEN_RESPONSE=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+        -H "Metadata-Flavor: Google")
     
-    if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+    # Extract access token using grep and sed (no jq dependency)
+    ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*"' | sed 's/"access_token":"\([^"]*\)"/\1/')
+    
+    if [ -z "$ACCESS_TOKEN" ]; then
         echo "ERROR: Failed to get access token from metadata server"
+        echo "Response: $TOKEN_RESPONSE"
         exit 1
     fi
     

@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # System deps (curl for health checks; git for HF private repos if needed; gsutil for Cloud Storage)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git curl wget unzip && \
+    build-essential git curl wget unzip jq && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Google Cloud SDK for gsutil
