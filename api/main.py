@@ -9,7 +9,7 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from sentence_transformers import CrossEncoder
 
-from api.llm_helper import llm_parse_query, llm_nlg_answer  # <-- new
+from llm_helper import llm_parse_query, llm_nlg_answer  # <-- new
 from dotenv import load_dotenv
 
 load_dotenv()
