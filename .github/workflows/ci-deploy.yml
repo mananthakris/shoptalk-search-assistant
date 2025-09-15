@@ -185,7 +185,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --memory 8Gi \
-            --cpu 1 \
+            --cpu 2 \
             --port 8000 \
             --service-account=$SERVICE_ACCOUNT_EMAIL \
             --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/vectordb,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }},VECTORDB_GS_PATH=${{ secrets.VECTORDB_GS_PATH }}"
