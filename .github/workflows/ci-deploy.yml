@@ -65,7 +65,7 @@ jobs:
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_API=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-api:${{ github.sha }}
           echo "Building API image: $AR_IMAGE_API"
-          docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
+          docker build -t $AR_IMAGE_API -f api/Dockerfile .
           docker push $AR_IMAGE_API
           echo "API image built: $AR_IMAGE_API"
           # Store just the image name without the full path to avoid secret detection
@@ -187,7 +187,6 @@ jobs:
             --memory 2Gi \
             --cpu 1 \
             --port 8000 \
-            --service-account=$SERVICE_ACCOUNT_EMAIL \
             --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/vectordb,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }},VECTORDB_GS_PATH=${{ secrets.VECTORDB_GS_PATH }}"
 
       - name: Get API URL
