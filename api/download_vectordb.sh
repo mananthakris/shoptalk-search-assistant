@@ -20,9 +20,8 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     export GOOGLE_CLOUD_PROJECT=$(curl -s "http://metadata.google.internal/computeMetadata/v1/project/project-id" -H "Metadata-Flavor: Google")
     echo "Using project: $GOOGLE_CLOUD_PROJECT"
     
-    # Set the account and project for gcloud
+    # Set only the account for gcloud (don't set project to avoid permission issues)
     gcloud config set account "$SERVICE_ACCOUNT_EMAIL"
-    gcloud config set project "$GOOGLE_CLOUD_PROJECT"
     
     # Authentication is configured, proceed with download
     echo "Authentication configured, proceeding with download..."
