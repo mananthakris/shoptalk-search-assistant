@@ -15,16 +15,12 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     SERVICE_ACCOUNT_EMAIL=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email" -H "Metadata-Flavor: Google")
     echo "Using service account: $SERVICE_ACCOUNT_EMAIL"
     
-    # Configure gcloud to use application default credentials
-    # Set the project ID from metadata server
+    # Set environment variables for Google Cloud libraries
     export GOOGLE_CLOUD_PROJECT=$(curl -s "http://metadata.google.internal/computeMetadata/v1/project/project-id" -H "Metadata-Flavor: Google")
     echo "Using project: $GOOGLE_CLOUD_PROJECT"
     
-    # Set only the account for gcloud (don't set project to avoid permission issues)
-    gcloud config set account "$SERVICE_ACCOUNT_EMAIL"
-    
-    # Authentication is configured, proceed with download
-    echo "Authentication configured, proceeding with download..."
+    # Don't configure gcloud - let it use the metadata server automatically
+    echo "Using Cloud Run metadata server for authentication..."
     
     # Download from Cloud Storage
     if [ -n "$VECTORDB_GS_PATH" ]; then
