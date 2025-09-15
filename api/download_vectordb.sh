@@ -8,14 +8,36 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     # Create vectordb directory
     mkdir -p /vectordb
     
-    # Download from Cloud Storage using the metadata server for authentication
+    # Get access token from metadata server
+    echo "Getting access token from metadata server..."
+    ACCESS_TOKEN=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+        -H "Metadata-Flavor: Google" | jq -r '.access_token')
+    
+    if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+        echo "ERROR: Failed to get access token from metadata server"
+        exit 1
+    fi
+    
+    echo "Access token obtained successfully"
+    
+    # Download from Cloud Storage using REST API
     if [ -n "$VECTORDB_GS_PATH" ]; then
         echo "Downloading from: $VECTORDB_GS_PATH"
-        gsutil -m cp -r "$VECTORDB_GS_PATH" /vectordb
+        # Extract bucket and object path from gs:// path
+        BUCKET_PATH=${VECTORDB_GS_PATH#gs://}
+        BUCKET_NAME=${BUCKET_PATH%%/*}
+        OBJECT_PATH=${BUCKET_PATH#*/}
+        
+        # Download using curl with access token
+        curl -H "Authorization: Bearer $ACCESS_TOKEN" \
+             -o "/vectordb/chroma.sqlite3" \
+             "https://storage.googleapis.com/storage/v1/b/$BUCKET_NAME/o/$OBJECT_PATH%2Fchroma.sqlite3?alt=media"
     else
         echo "VECTORDB_GS_PATH not set, using default path"
-        # Default path - you can customize this
-        gsutil -m cp -r "gs://shoptalk-data/vectordb" /vectordb
+        # Default path
+        curl -H "Authorization: Bearer $ACCESS_TOKEN" \
+             -o "/vectordb/chroma.sqlite3" \
+             "https://storage.googleapis.com/storage/v1/b/shoptalk-data/o/vectordb%2Fchroma.sqlite3?alt=media"
     fi
     
     echo "Vector database downloaded successfully"
