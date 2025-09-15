@@ -101,6 +101,7 @@ VECTORDB_GS_PATH      # gs://your-project-shoptalk-vectordb/vectordb
    - **Cloud Run Admin**: Deploy and manage Cloud Run services
    - **Storage Admin**: Access Cloud Storage bucket
    - **Service Account User**: Use service accounts
+   - **Project Viewer**: Access project information (needed for gcloud commands)
    - Click **"CONTINUE"** → **"DONE"**
 
 4. **Grant Bucket Access** (Important for private buckets):

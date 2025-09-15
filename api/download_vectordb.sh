@@ -24,9 +24,8 @@ if [ ! -d "/vectordb" ] || [ ! -f "/vectordb/chroma.sqlite3" ]; then
     gcloud config set account "$SERVICE_ACCOUNT_EMAIL"
     gcloud config set project "$GOOGLE_CLOUD_PROJECT"
     
-    # Verify authentication is working
-    echo "Testing authentication..."
-    gcloud auth list
+    # Authentication is configured, proceed with download
+    echo "Authentication configured, proceeding with download..."
     
     # Download from Cloud Storage
     if [ -n "$VECTORDB_GS_PATH" ]; then
