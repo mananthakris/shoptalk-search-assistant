@@ -65,7 +65,7 @@ jobs:
           AR_HOST=${{ secrets.GCP_REGION }}-docker.pkg.dev
           AR_IMAGE_API=$AR_HOST/${{ secrets.GCP_PROJECT_ID }}/shoptalk/shoptalk-api:${{ github.sha }}
           echo "Building API image: $AR_IMAGE_API"
-          docker build -t $AR_IMAGE_API -f api/Dockerfile .
+          docker build -t $AR_IMAGE_API -f api/Dockerfile ./api
           docker push $AR_IMAGE_API
           echo "API image built: $AR_IMAGE_API"
           # Store just the image name without the full path to avoid secret detection

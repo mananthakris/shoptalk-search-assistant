@@ -24,11 +24,11 @@ RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu 
     torch==2.3.* torchvision==0.18.* torchaudio==2.3.*
 
 # ========= Deps layer (cacheable) =========
-COPY requirements.txt .
+COPY api/requirements.txt .
 RUN pip install -r requirements.txt
 
 # ========= App =========
-COPY . .
+COPY api/ .
 
 # Make startup script executable
 RUN chmod +x download_vectordb.sh
