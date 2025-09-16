@@ -196,13 +196,11 @@ async def answer(q: str = Query(...), k: int = 20):
             ids, metas, dists = ids[:k], metas[:k], dists[:k]
             debug_distribution("post-filters", ids, metas)
             
-            # Limit results for LLM processing to prevent timeouts
-            llm_metas = metas[:5]  # Only send top 5 to LLM
-
             # 4) NLG over candidates (with timeout)
-            print(f"Starting LLM response generation for {len(llm_metas)} products (limited from {len(metas)} total)...")
+            # Use all results for LLM, but with optimized processing
+            print(f"Starting LLM response generation for {len(metas)} products...")
             try:
-                answer = await asyncio.wait_for(llm_nlg_answer(q, parsed, llm_metas), timeout=20.0)
+                answer = await asyncio.wait_for(llm_nlg_answer(q, parsed, metas), timeout=25.0)
                 print("LLM response generation completed")
             except asyncio.TimeoutError:
                 print("LLM response generation timed out, using fallback response")
@@ -222,8 +220,8 @@ async def answer(q: str = Query(...), k: int = 20):
             print(f"Response prepared successfully: answer length={len(answer)}, results count={len(results)}")
             return response
         
-        # Run with 45 second timeout (increased for Weaviate + LLM operations)
-        result = await asyncio.wait_for(search_with_timeout(), timeout=45.0)
+        # Run with 50 second timeout (increased for Weaviate + LLM operations with full result sets)
+        result = await asyncio.wait_for(search_with_timeout(), timeout=50.0)
         return result
         
     except asyncio.TimeoutError:

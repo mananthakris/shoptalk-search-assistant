@@ -124,15 +124,30 @@ async def llm_nlg_answer(orig_query: str, filters: Dict[str, Any], metas: List[D
         print(f"Using cached LLM response for query: {orig_query[:50]}...")
         return _llm_cache[cache_key]
     
-    # Trim and sanitize metas for the LLM (limit to 5 items for faster processing)
+    # Smart sampling: take top 3 + representative sample for larger result sets
+    if len(metas) <= 8:
+        # Small result set: use all items
+        sample_metas = metas
+    else:
+        # Large result set: take top 3 + every nth item for diversity
+        sample_metas = metas[:3]  # Always include top 3
+        if len(metas) > 8:
+            # Add every 4th item from the rest for diversity
+            step = max(1, len(metas) // 8)
+            sample_metas.extend(metas[3::step][:5])  # Add up to 5 more items
+    
+    print(f"LLM processing {len(sample_metas)} representative items from {len(metas)} total results")
+    
+    # Trim and sanitize metas for the LLM
     items = []
-    for m in metas[:5]:
+    for m in sample_metas:
         items.append({
             "title":    (m.get("title") or "")[:200],
             "url":      (m.get("url") or "")[:500],
             "price":    m.get("price", None),
             "category": m.get("category", None),
         })
+    
     llm = _chat_model(_NLG_MODEL)
     msg = _nlg_prompt.invoke({
         "orig_query": orig_query,
@@ -141,7 +156,12 @@ async def llm_nlg_answer(orig_query: str, filters: Dict[str, Any], metas: List[D
     })
     resp = await llm.ainvoke(msg.to_messages())
     text = resp.content if hasattr(resp, "content") else str(resp)
-    result = (text or "").strip() or "Here are a few options based on your query."
+    
+    # Include total count in response for large result sets
+    if len(metas) > 8:
+        result = (text or "").strip() or f"Found {len(metas)} products matching your search. Here are some top options:"
+    else:
+        result = (text or "").strip() or "Here are a few options based on your query."
     
     # Cache the result (limit cache size to prevent memory issues)
     if len(_llm_cache) < 100:
