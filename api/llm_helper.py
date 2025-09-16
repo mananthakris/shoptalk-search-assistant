@@ -116,8 +116,8 @@ _nlg_prompt = ChatPromptTemplate.from_messages(
 )
 
 async def llm_nlg_answer(orig_query: str, filters: Dict[str, Any], metas: List[Dict[str, Any]]) -> str:
-    # Create cache key based on query and top 3 products
-    cache_key = hashlib.md5(f"{orig_query}_{len(metas)}_{json.dumps([m.get('title', '') for m in metas[:3]], sort_keys=True)}".encode()).hexdigest()
+    # Create cache key based on query, filters, and top 3 products
+    cache_key = hashlib.md5(f"{orig_query}_{json.dumps(filters, sort_keys=True)}_{len(metas)}_{json.dumps([m.get('title', '') for m in metas[:3]], sort_keys=True)}".encode()).hexdigest()
     
     # Check cache first
     if cache_key in _llm_cache:

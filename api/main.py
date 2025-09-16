@@ -118,6 +118,34 @@ class AnswerResp(BaseModel):
     filters: Dict[str, Any]
     results: List[Dict[str, Any]]
 
+@app.get("/health")
+def health():
+    return {"status": "healthy", "timestamp": "2025-01-16T20:00:00Z"}
+
+@app.get("/debug")
+def debug():
+    """Debug endpoint to check system status"""
+    try:
+        # Test vector database connection
+        test_query = "test"
+        qvec = embed_query(test_query)
+        test_results = vectordb.query(query_embedding=qvec, n_results=1, include_metadata=True)
+        
+        return {
+            "status": "healthy",
+            "vectordb_connected": True,
+            "vectordb_type": "Weaviate" if os.getenv("USE_WEAVIATE", "false").lower() == "true" else "ChromaDB",
+            "total_products": vectordb.count(),
+            "test_query_results": len(test_results.get("ids", [[]])[0]),
+            "timestamp": "2025-01-16T20:00:00Z"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": "2025-01-16T20:00:00Z"
+        }
+
 @app.get("/answer", response_model=AnswerResp)
 async def answer(q: str = Query(...), k: int = 20):
     try:
@@ -164,14 +192,17 @@ async def answer(q: str = Query(...), k: int = 20):
             if ids and metas:
                 ids, metas, dists = rerank(rewritten, ids, metas, dists, topn=50)
 
-            # slice down to final top-k
+            # slice down to final top-k BEFORE LLM processing
             ids, metas, dists = ids[:k], metas[:k], dists[:k]
             debug_distribution("post-filters", ids, metas)
+            
+            # Limit results for LLM processing to prevent timeouts
+            llm_metas = metas[:5]  # Only send top 5 to LLM
 
             # 4) NLG over candidates (with timeout)
-            print(f"Starting LLM response generation for {len(metas)} products...")
+            print(f"Starting LLM response generation for {len(llm_metas)} products (limited from {len(metas)} total)...")
             try:
-                answer = await asyncio.wait_for(llm_nlg_answer(q, parsed, metas), timeout=20.0)
+                answer = await asyncio.wait_for(llm_nlg_answer(q, parsed, llm_metas), timeout=20.0)
                 print("LLM response generation completed")
             except asyncio.TimeoutError:
                 print("LLM response generation timed out, using fallback response")
@@ -186,7 +217,10 @@ async def answer(q: str = Query(...), k: int = 20):
                 r["score"] = s
                 results.append(r)
 
-            return AnswerResp(answer=answer, rewritten_query=rewritten, filters=parsed, results=results)
+            print(f"Returning {len(results)} results to UI")
+            response = AnswerResp(answer=answer, rewritten_query=rewritten, filters=parsed, results=results)
+            print(f"Response prepared successfully: answer length={len(answer)}, results count={len(results)}")
+            return response
         
         # Run with 45 second timeout (increased for Weaviate + LLM operations)
         result = await asyncio.wait_for(search_with_timeout(), timeout=45.0)
