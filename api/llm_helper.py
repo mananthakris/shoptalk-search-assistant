@@ -1,4 +1,4 @@
-import os, json
+import os, json, hashlib
 from typing import Any, Dict, List, Optional
 
 # LangChain (model-agnostic)
@@ -8,6 +8,9 @@ from langchain_core.prompts import ChatPromptTemplate
 # --- configuration helpers ---
 _PARSE_MODEL = os.getenv("PARSE_MODEL", "gpt-4o-mini")
 _NLG_MODEL   = os.getenv("NLG_MODEL",   "gpt-4o-mini")
+
+# Simple in-memory cache for LLM responses
+_llm_cache = {}
 
 # Build a generic LC chat model factory so you can swap vendors later.
 def _chat_model(model_name: str):
@@ -113,6 +116,14 @@ _nlg_prompt = ChatPromptTemplate.from_messages(
 )
 
 async def llm_nlg_answer(orig_query: str, filters: Dict[str, Any], metas: List[Dict[str, Any]]) -> str:
+    # Create cache key based on query and top 3 products
+    cache_key = hashlib.md5(f"{orig_query}_{len(metas)}_{json.dumps([m.get('title', '') for m in metas[:3]], sort_keys=True)}".encode()).hexdigest()
+    
+    # Check cache first
+    if cache_key in _llm_cache:
+        print(f"Using cached LLM response for query: {orig_query[:50]}...")
+        return _llm_cache[cache_key]
+    
     # Trim and sanitize metas for the LLM (limit to 5 items for faster processing)
     items = []
     for m in metas[:5]:
@@ -130,4 +141,10 @@ async def llm_nlg_answer(orig_query: str, filters: Dict[str, Any], metas: List[D
     })
     resp = await llm.ainvoke(msg.to_messages())
     text = resp.content if hasattr(resp, "content") else str(resp)
-    return (text or "").strip() or "Here are a few options based on your query."
+    result = (text or "").strip() or "Here are a few options based on your query."
+    
+    # Cache the result (limit cache size to prevent memory issues)
+    if len(_llm_cache) < 100:
+        _llm_cache[cache_key] = result
+    
+    return result
