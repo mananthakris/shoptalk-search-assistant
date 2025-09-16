@@ -188,9 +188,21 @@ async def answer(q: str = Query(...), k: int = 20):
                 metas = out_f["metadatas"][0] if out_f.get("metadatas") else []
                 dists = out_f["distances"][0] if out_f.get("distances") else []
             
-            #rerank BEFORE trimming to top-k
+            #rerank BEFORE trimming to top-k (limit to reasonable size for performance)
             if ids and metas:
-                ids, metas, dists = rerank(rewritten, ids, metas, dists, topn=50)
+                # Limit reranking to prevent timeouts with large result sets
+                rerank_limit = min(50, len(metas), k * 3)  # Don't rerank more than 3x the requested k
+                print(f"Reranking top {rerank_limit} results from {len(metas)} total")
+                try:
+                    # Add timeout for reranking to prevent hanging
+                    async def rerank_with_timeout():
+                        return rerank(rewritten, ids, metas, dists, topn=rerank_limit)
+                    ids, metas, dists = await asyncio.wait_for(rerank_with_timeout(), timeout=10.0)
+                    print("Reranking completed successfully")
+                except asyncio.TimeoutError:
+                    print("Reranking timed out, using original order")
+                    # Keep original order if reranking times out
+                    pass
 
             # slice down to final top-k BEFORE LLM processing
             ids, metas, dists = ids[:k], metas[:k], dists[:k]
@@ -237,7 +249,16 @@ def debug_distribution(label, ids, metas):
 
 def rerank(q: str, ids, metas, dists, topn: int = 50):
     n = min(topn, len(metas))
-    pairs = [(q, (m.get("text") or m.get("title") or "")) for m in metas[:n]]
+    # Optimize text extraction for reranking
+    pairs = []
+    for m in metas[:n]:
+        text = m.get("text") or m.get("title") or ""
+        # Truncate very long texts to improve reranking speed
+        if len(text) > 500:
+            text = text[:500] + "..."
+        pairs.append((q, text))
+    
+    print(f"Reranking {len(pairs)} pairs...")
     scores = reranker.predict(pairs)  # array of floats
     order = sorted(range(n), key=lambda i: scores[i], reverse=True)
     return [ids[i] for i in order], [metas[i] for i in order], [dists[i] for i in order]
