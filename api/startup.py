@@ -30,14 +30,14 @@ def preload_models():
                     time.sleep(wait_time)
                     continue
                 else:
-                    print(f"❌ Rate limit exceeded, falling back to default model")
-                    encoder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+                    print(f"❌ Rate limit exceeded, falling back to base e5 model")
+                    encoder = SentenceTransformer("intfloat/e5-base-v2")
                     print("✅ Fallback encoder loaded")
                     break
             else:
                 print(f"❌ Error loading {model_name}: {e}")
-                print("🔄 Falling back to default model")
-                encoder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+                print("🔄 Falling back to base e5 model")
+                encoder = SentenceTransformer("intfloat/e5-base-v2")
                 print("✅ Fallback encoder loaded")
                 break
     

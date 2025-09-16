@@ -35,8 +35,8 @@ def get_encoder():
         return encoder
     except Exception as e:
         print(f"Error loading model {model_name}: {e}")
-        # Fallback to a more common model if the fine-tuned one fails
-        fallback_model = "sentence-transformers/all-MiniLM-L6-v2"
+        # Fallback to the base e5 model if the fine-tuned one fails
+        fallback_model = "intfloat/e5-base-v2"
         print(f"Falling back to: {fallback_model}")
         try:
             encoder = SentenceTransformer(fallback_model)
