@@ -188,7 +188,7 @@ jobs:
             --cpu 2 \
             --port 8000 \
             --service-account=$SERVICE_ACCOUNT_EMAIL \
-            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},DB_PATH=/vectordb,PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }},VECTORDB_GS_PATH=${{ secrets.VECTORDB_GS_PATH }}"
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }},USE_WEAVIATE=true,WEAVIATE_URL=${{ secrets.WEAVIATE_URL }},WEAVIATE_API_KEY=${{ secrets.WEAVIATE_API_KEY }},WEAVIATE_CLASS_NAME=${{ secrets.WEAVIATE_CLASS_NAME }},PARSE_MODEL=${{ secrets.PARSE_MODEL }},NLG_MODEL=${{ secrets.NLG_MODEL }}"
 
       - name: Get API URL
         id: apiurl

@@ -9,13 +9,22 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from sentence_transformers import CrossEncoder
 
-from llm_helper import llm_parse_query, llm_nlg_answer  # <-- new
+try:
+    from llm_helper import llm_parse_query, llm_nlg_answer  # Docker container
+except ImportError:
+    from api.llm_helper import llm_parse_query, llm_nlg_answer  # Local development
 from dotenv import load_dotenv
 
 load_dotenv()
-client = chromadb.PersistentClient(path=os.getenv("DB_PATH", "vectordb"))
-coll   = client.get_or_create_collection(name="products", metadata={"hnsw:space":"cosine"})
 encoder = SentenceTransformer(os.getenv("MODEL_NAME", "mananthakris/e5-base-ft-abo"))
+
+# Initialize vector database (Pinecone for cloud, ChromaDB for local)
+try:
+    from vector_db import VectorDB
+    vectordb = VectorDB(encoder)
+except ImportError:
+    from api.vector_db import VectorDB
+    vectordb = VectorDB(encoder)
 # print("Encoder name:",os.getenv("MODEL_NAME"))
 # print("Encoder dims:",encoder.get_sentence_embedding_dimension())
 # query = "red running shoes under $100"
@@ -37,7 +46,7 @@ app = FastAPI(title="ShopTalk — LLM + Vector Search")
 reranker = CrossEncoder("BAAI/bge-reranker-v2-m3") # good multilingual reranker
 
 def embed_query(text: str) -> List[float]:
-    return encoder.encode([f"query: {text}"], normalize_embeddings=True)[0].tolist()
+    return vectordb.embed_query(text)
 
 def apply_filters(results: Dict[str, List], filters: Dict[str, Any]) -> Dict[str, List]:
     ids   = results.get("ids", [[]])[0]
@@ -123,7 +132,7 @@ async def answer(q: str = Query(...), k: int = 20):
             # 2) Retrieve - let vector search handle category matching naturally
             pool = max(k * 2, 100)  # Get more results to allow for post-filtering
             qvec = embed_query(rewritten)
-            out  = coll.query(query_embeddings=[qvec], n_results=pool, include=["metadatas","distances"])
+            out  = vectordb.query(query_embedding=qvec, n_results=pool, include_metadata=True)
             
 
             # 3) Filter

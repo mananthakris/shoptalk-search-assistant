@@ -10,3 +10,4 @@ langchain-openai>=0.1.0
 pydantic
 httpx
 python-dotenv
+weaviate-client
