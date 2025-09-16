@@ -161,22 +161,31 @@ This project is **production-ready** with full containerization and automated de
 graph TB
     subgraph "GitHub Actions CI/CD"
         A[Code Push] --> B[Build Docker Images]
-        B --> C[Push to GHCR]
+        B --> C[Push to Artifact Registry]
         C --> D[Deploy to Cloud Run]
     end
     
     subgraph "GCP Cloud Run"
         D --> E[API Service]
         D --> F[UI Service]
-        E --> G[Vector Database]
+        E --> G[Weaviate Vector DB]
         F --> E
     end
     
-    subgraph "Security & Best Practices"
-        H[GitHub Secrets] --> I[Environment Variables]
-        J[No Secrets in Code] --> K[Secure Configuration]
-        L[Health Checks] --> M[Monitoring]
+    subgraph "Vector Database Options"
+        H[Local Development] --> I[ChromaDB]
+        J[Cloud Production] --> K[Weaviate Cloud]
+        I --> L[Persistent Storage]
+        K --> M[Managed Service]
     end
+    
+    subgraph "Security & Best Practices"
+        N[GitHub Secrets] --> O[Environment Variables]
+        P[No Secrets in Code] --> Q[Secure Configuration]
+        R[Health Checks] --> S[Monitoring]
+    end
+    
+    G --> K
 ```
 
 ### 🚀 Automated Deployment Features
@@ -189,9 +198,10 @@ graph TB
 
 #### ✅ **CI/CD Pipeline**
 - **GitHub Actions** automated deployment
-- **Container Registry** (GitHub Container Registry)
+- **Google Artifact Registry** for container images
 - **Zero-downtime deployments** with Cloud Run
 - **Environment-specific configurations**
+- **Vector database abstraction** (ChromaDB local, Weaviate cloud)
 
 #### ✅ **Production Security**
 - **Secrets management** via GitHub Secrets (no secrets in code)
@@ -213,13 +223,58 @@ OPENAI_API_KEY         # OpenAI API key
 OPENAI_BASE_URL        # OpenAI endpoint (optional)
 PARSE_MODEL           # LLM model for parsing
 NLG_MODEL             # LLM model for generation
+
+# Vector Database Configuration (Cloud)
+WEAVIATE_URL          # Weaviate cluster URL
+WEAVIATE_API_KEY      # Weaviate API key
+WEAVIATE_CLASS_NAME   # Weaviate collection name (default: Product)
 ```
 
 #### Cloud Run Services
-- **API Service**: `shoptalk-api` (1 CPU, 1GB RAM)
+- **API Service**: `shoptalk-api` (2 CPU, 8GB RAM) - Optimized for vector operations
 - **UI Service**: `shoptalk-ui` (1 CPU, 512MB RAM)
 - **Auto-scaling**: 0-100 instances based on traffic
 - **Public access**: Unauthenticated (configurable)
+- **Vector Database**: Weaviate Cloud (managed service, no memory constraints)
+
+### 🗄️ Vector Database Setup
+
+#### Local Development (ChromaDB)
+```bash
+# Build local vector database
+make seed
+
+# Or manually
+python ingest/rebuild_index.py --parquet data/products_e5-base.parquet --db-path vectordb --collection products --wipe
+```
+
+#### Cloud Production (Weaviate)
+```bash
+# 1. Create Weaviate cluster at https://console.weaviate.cloud
+# 2. Get cluster URL and API key from dashboard
+# 3. Set environment variables
+export WEAVIATE_URL="your-cluster-url"
+export WEAVIATE_API_KEY="your-api-key"
+export WEAVIATE_CLASS_NAME="Product"
+
+# 4. Migrate data from local ChromaDB to Weaviate
+python migrate_to_weaviate.py
+```
+
+#### Migration Process
+The migration script (`migrate_to_weaviate.py`) performs the following:
+1. **Connects** to local ChromaDB and Weaviate cluster
+2. **Creates schema** in Weaviate with product properties
+3. **Transfers data** in batches (100 products at a time)
+4. **Verifies migration** by counting total products
+5. **Handles 145,615+ products** efficiently
+
+#### Vector Database Abstraction
+The system uses a `VectorDB` abstraction layer that automatically:
+- **Detects environment** (local vs cloud) via `USE_WEAVIATE` flag
+- **Routes queries** to appropriate database (ChromaDB or Weaviate)
+- **Maintains compatibility** with existing search logic
+- **Handles authentication** and connection management
 
 ### 🛠️ Manual Deployment
 
@@ -330,14 +385,43 @@ curl "http://localhost:8000/health"
 
 ## 🧪 Testing
 
+### Test Suite Overview
+The project includes comprehensive tests covering all major components:
+
 ```bash
-# Run API tests
+# Run all tests
 python -m pytest tests/
 
-# Test specific functionality
-python tests/test_api_health.py
-python tests/test_embed_and_retreive.py
+# Run specific test categories
+python -m pytest tests/test_api_health.py          # API health checks
+python -m pytest tests/test_embed_and_retreive.py  # Embedding functionality
+python -m pytest tests/test_env.py                 # Environment configuration
+python -m pytest tests/test_llm_parse_stub.py      # LLM parsing logic
+python -m pytest tests/test_weaviate_connection.py # Weaviate connectivity
+python -m pytest tests/test_vector_db_abstraction.py # Vector DB abstraction
 ```
+
+### Test Categories
+
+#### 🔗 **Connection Tests**
+- **Weaviate Connection**: Tests cluster connectivity and authentication
+- **ChromaDB Connection**: Tests local database connectivity
+- **API Health**: Tests FastAPI server health endpoints
+
+#### 🧠 **Vector Database Tests**
+- **Abstraction Layer**: Tests VectorDB class with both ChromaDB and Weaviate
+- **Query Compatibility**: Ensures consistent results across databases
+- **Migration Validation**: Tests data migration from ChromaDB to Weaviate
+
+#### 🔍 **Search Functionality Tests**
+- **Embedding Generation**: Tests query and document embedding creation
+- **Vector Search**: Tests similarity search with various query types
+- **Result Formatting**: Tests response format consistency
+
+#### 🤖 **LLM Integration Tests**
+- **Query Parsing**: Tests natural language to structured query conversion
+- **Response Generation**: Tests LLM-powered natural language responses
+- **Error Handling**: Tests graceful handling of LLM failures
 
 ## 📊 Performance Metrics
 
@@ -355,6 +439,7 @@ shoptalk-search-assistant/
 ├── api/                    # FastAPI backend
 │   ├── main.py            # Main API server
 │   ├── llm_helper.py      # LangChain integration
+│   ├── vector_db.py       # Vector database abstraction
 │   └── requirements.txt   # API dependencies
 ├── data/                  # Data storage
 │   ├── products_e5-base.parquet  # Product embeddings
@@ -366,10 +451,17 @@ shoptalk-search-assistant/
 ├── research/              # Research notebooks
 │   └── eda/               # Exploratory data analysis
 ├── tests/                 # Test suite
+│   ├── test_api_health.py # API health tests
+│   ├── test_embed_and_retreive.py # Embedding tests
+│   ├── test_env.py        # Environment tests
+│   ├── test_llm_parse_stub.py # LLM parsing tests
+│   ├── test_weaviate_connection.py # Weaviate connection tests
+│   └── test_vector_db_abstraction.py # Vector DB abstraction tests
 ├── ui/                    # Streamlit frontend
 │   ├── app.py            # Streamlit application
 │   └── requirements.txt  # UI dependencies
-├── vectordb/             # Chroma vector database
+├── vectordb/             # Chroma vector database (local)
+├── migrate_to_weaviate.py # Weaviate migration script
 └── README.md             # This file
 ```
 
