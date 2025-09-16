@@ -16,7 +16,38 @@ except ImportError:
 from dotenv import load_dotenv
 
 load_dotenv()
-encoder = SentenceTransformer(os.getenv("MODEL_NAME", "mananthakris/e5-base-ft-abo"))
+
+# Global model cache to prevent repeated downloads
+_model_cache = {}
+
+def get_encoder():
+    """Get encoder with caching and retry logic to handle rate limits"""
+    model_name = os.getenv("MODEL_NAME", "mananthakris/e5-base-ft-abo")
+    
+    if model_name in _model_cache:
+        return _model_cache[model_name]
+    
+    try:
+        print(f"Loading model: {model_name}")
+        encoder = SentenceTransformer(model_name)
+        _model_cache[model_name] = encoder
+        print(f"Model loaded successfully: {model_name}")
+        return encoder
+    except Exception as e:
+        print(f"Error loading model {model_name}: {e}")
+        # Fallback to a more common model if the fine-tuned one fails
+        fallback_model = "sentence-transformers/all-MiniLM-L6-v2"
+        print(f"Falling back to: {fallback_model}")
+        try:
+            encoder = SentenceTransformer(fallback_model)
+            _model_cache[fallback_model] = encoder
+            return encoder
+        except Exception as fallback_error:
+            print(f"Fallback model also failed: {fallback_error}")
+            raise
+
+# Initialize encoder with error handling
+encoder = get_encoder()
 
 # Initialize vector database (Pinecone for cloud, ChromaDB for local)
 try:
@@ -46,7 +77,25 @@ app = FastAPI(title="ShopTalk — LLM + Vector Search")
 reranker = CrossEncoder("BAAI/bge-reranker-v2-m3") # good multilingual reranker
 
 def embed_query(text: str) -> List[float]:
-    return vectordb.embed_query(text)
+    """Embed query with retry logic for rate limit handling"""
+    import time
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return vectordb.embed_query(text)
+        except Exception as e:
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                    print(f"Rate limit hit, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print(f"Rate limit exceeded after {max_retries} attempts")
+                    raise
+            else:
+                raise
 
 def apply_filters(results: Dict[str, List], filters: Dict[str, Any]) -> Dict[str, List]:
     ids   = results.get("ids", [[]])[0]

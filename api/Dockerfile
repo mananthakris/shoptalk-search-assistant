@@ -24,6 +24,9 @@ RUN pip install -r requirements.txt
 # ========= App =========
 COPY . .
 
+# Preload models to avoid runtime downloads and rate limits
+RUN python startup.py
+
 # Expose FastAPI port
 EXPOSE 8000
 
