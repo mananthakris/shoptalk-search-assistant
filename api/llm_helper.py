@@ -99,10 +99,8 @@ async def llm_parse_query(user_text: str) -> Dict[str, Any]:
 
 # --------- NLG ---------
 
-_NLG_SYS = """You are a shopping assistant.
-Write a concise answer using ONLY the provided candidate products.
-Do not invent price or availability. Mention 3–5 items max with a brief reason.
-Return short paragraphs or bullet points."""
+_NLG_SYS = """You are a shopping assistant. Write a brief answer using ONLY the provided products.
+Mention 2-3 items max. Keep it concise - 1-2 sentences per item."""
 
 _NLG_USER = """User query: {orig_query}
 Parsed filters: {filters_json}
@@ -115,9 +113,9 @@ _nlg_prompt = ChatPromptTemplate.from_messages(
 )
 
 async def llm_nlg_answer(orig_query: str, filters: Dict[str, Any], metas: List[Dict[str, Any]]) -> str:
-    # Trim and sanitize metas for the LLM
+    # Trim and sanitize metas for the LLM (limit to 5 items for faster processing)
     items = []
-    for m in metas[:8]:
+    for m in metas[:5]:
         items.append({
             "title":    (m.get("title") or "")[:200],
             "url":      (m.get("url") or "")[:500],

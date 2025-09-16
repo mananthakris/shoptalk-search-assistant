@@ -123,23 +123,31 @@ async def answer(q: str = Query(...), k: int = 20):
     try:
         # Add timeout to prevent hanging
         async def search_with_timeout():
-            # 1) LLM pre-search
-            parsed = await llm_parse_query(q)
+            # 1) LLM pre-search (with timeout)
+            try:
+                parsed = await asyncio.wait_for(llm_parse_query(q), timeout=10.0)
+            except asyncio.TimeoutError:
+                print("LLM query parsing timed out, using basic parsing")
+                parsed = {"rewrite": q, "category": None, "color": None, "brand": None, "gender": None, "price_max": None, "must_have": []}
             rewritten = parsed.get("rewrite") or q
             print(f"filters: {parsed}")
 
             print(f"rewritten query: {rewritten}")
             # 2) Retrieve - let vector search handle category matching naturally
             pool = max(k * 2, 100)  # Get more results to allow for post-filtering
+            print(f"Starting vector search with pool size: {pool}")
             qvec = embed_query(rewritten)
             out  = vectordb.query(query_embedding=qvec, n_results=pool, include_metadata=True)
+            print(f"Vector search completed, found {len(out.get('ids', [[]])[0])} results")
             
 
             # 3) Filter
+            print("Starting filtering...")
             out_f = apply_filters(out, parsed)
             ids   = out_f["ids"][0] if out_f.get("ids") else []
             metas = out_f["metadatas"][0] if out_f.get("metadatas") else []
             dists = out_f["distances"][0] if out_f.get("distances") else []
+            print(f"Filtering completed, {len(ids)} results after filtering")
             
             # If no results after filtering, try without category filter
             if not ids and parsed.get("category"):
@@ -160,8 +168,14 @@ async def answer(q: str = Query(...), k: int = 20):
             ids, metas, dists = ids[:k], metas[:k], dists[:k]
             debug_distribution("post-filters", ids, metas)
 
-            # 4) NLG over candidates
-            answer = await llm_nlg_answer(q, parsed, metas)
+            # 4) NLG over candidates (with timeout)
+            print(f"Starting LLM response generation for {len(metas)} products...")
+            try:
+                answer = await asyncio.wait_for(llm_nlg_answer(q, parsed, metas), timeout=20.0)
+                print("LLM response generation completed")
+            except asyncio.TimeoutError:
+                print("LLM response generation timed out, using fallback response")
+                answer = f"Found {len(metas)} products matching your search for '{q}'. Here are the top results:"
 
             # Convert distances → similarity-ish score for UI
             results = []
@@ -174,8 +188,8 @@ async def answer(q: str = Query(...), k: int = 20):
 
             return AnswerResp(answer=answer, rewritten_query=rewritten, filters=parsed, results=results)
         
-        # Run with 30 second timeout
-        result = await asyncio.wait_for(search_with_timeout(), timeout=30.0)
+        # Run with 45 second timeout (increased for Weaviate + LLM operations)
+        result = await asyncio.wait_for(search_with_timeout(), timeout=45.0)
         return result
         
     except asyncio.TimeoutError:
